@@ -34,6 +34,7 @@ LLM_MODEL = "openai/gpt-oss-120b"
 # --- Paramètres de génération ---
 TEMPERATURE = 0.7   # 0 = réponses stables, 1 = réponses plus variées
 MAX_TOKENS = 1024   # longueur maximale d'une réponse
+REASONING_EFFORT = "low" # effort de réflexion de gpt-oss : "low", "medium", "high"
 
 # --- Chemins ---
 PROMPTS_DIR = ROOT_DIR / "prompts"
