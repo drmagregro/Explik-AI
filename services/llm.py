@@ -5,7 +5,7 @@ import config
 
 @dataclass
 class ReponseLLM:
-    
+
     texte: str
     tokens_entree: int
     tokens_sortie: int
@@ -16,7 +16,6 @@ class ReponseLLM:
 
 
 class ServiceLLM:
-    
 
     def __init__(self, modele: str | None = None, temperature: float | None = None):
         self._client = Groq(api_key=config.GROQ_API_KEY)
@@ -53,26 +52,38 @@ class ServiceLLM:
             reasoning_effort=config.REASONING_EFFORT,
             include_reasoning=False,  
         )
+    @classmethod
+    def vision(cls) -> "ServiceLLM":
+        return cls(modele=config.VISION_MODEL)
+
+    def _parametres(self, messages: list[dict], temperature: float | None) -> dict:
+        return {
+            "model": self.modele,
+            "messages": messages,
+            "temperature": self.temperature if temperature is None else temperature,
+            "max_completion_tokens": config.MAX_TOKENS,
+            **config.PARAMETRES_RAISONNEMENT.get(self.modele, {}),
+        }
+
+    def generer(self, messages: list[dict], temperature: float | None = None) -> ReponseLLM:
+        reponse = self._client.chat.completions.create(**self._parametres(messages, temperature))
         usage = reponse.usage
         return ReponseLLM(
             texte=reponse.choices[0].message.content or "",
             tokens_entree=usage.prompt_tokens,
             tokens_sortie=usage.completion_tokens,
         )
-    
+
     def generer_stream(self, messages: list[dict], temperature: float | None = None):
         """Produit la réponse morceau par morceau, au fil de la génération."""
         messages = self.preparer_messages(messages)
         flux = self._client.chat.completions.create(
-            model=self.modele,
-            messages=messages,
-            temperature=self.temperature if temperature is None else temperature,
-            max_completion_tokens=config.MAX_TOKENS,
-            reasoning_effort=config.REASONING_EFFORT,
-            include_reasoning=False,
+            **self._parametres(messages, temperature),
             stream=True,
         )
         for morceau in flux:
+            if not morceau.choices:
+                continue
             texte = morceau.choices[0].delta.content
             if texte:
                 yield texte
