@@ -45,11 +45,10 @@ class InterfaceChat:
             st.markdown(question)
 
         with st.chat_message("assistant"):
-            with st.spinner("Réflexion en cours…"):
-                reponse = self.service.generer(self.historique)
-            st.markdown(reponse.texte)
+            # write_stream affiche les morceaux au fil de l'eau et renvoie le texte complet
+            texte = st.write_stream(self.service.generer_stream(self.historique))
 
-        self.historique.append({"role": "assistant", "content": reponse.texte})
+        self.historique.append({"role": "assistant", "content": texte})
 
     def lancer(self) -> None:
         self.afficher_barre_laterale()
