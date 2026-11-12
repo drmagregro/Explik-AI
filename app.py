@@ -1,7 +1,10 @@
 import streamlit as st
 
+import config
+
 from services.images import ImageInvalide, ServiceImage
 from services.llm import ServiceLLM
+from services.stt import ErreurTranscription, ServiceSTT
 
 
 @st.cache_resource
@@ -14,12 +17,18 @@ def obtenir_service_vision() -> ServiceLLM:
     return ServiceLLM.vision()
 
 
+@st.cache_resource
+def obtenir_service_stt() -> ServiceSTT:
+    return ServiceSTT()
+
+
 class InterfaceChat:
 
     CLE_HISTORIQUE = "messages"
 
     def __init__(self, service_texte: ServiceLLM, service_vision: ServiceLLM,
-                 service_image: ServiceImage):
+                 service_image: ServiceImage, service_stt: ServiceSTT):
+        self.service_stt = service_stt
         self.service_texte = service_texte
         self.service_vision = service_vision
         self.service_image = service_image
@@ -44,7 +53,23 @@ class InterfaceChat:
             with st.chat_message(message["role"]):
                 if message.get("image"):
                     st.image(message["image"], width=300)
-                st.markdown(message["content"])
+                self._afficher_texte(message)
+
+    @staticmethod
+    def _afficher_texte(message: dict) -> None:
+        """Signale un message dicté pour que l'utilisateur voie ce qui a été compris."""
+        if message.get("vocal"):
+            st.caption("🎤 Message dicté, transcription automatique :")
+        st.markdown(message["content"])
+
+    def _transcrire(self, audio) -> str | None:
+        """Transcrit l'audio du micro. Renvoie None (et affiche l'erreur) en cas d'échec."""
+        with st.spinner("Transcription en cours…"):
+            try:
+                return self.service_stt.transcrire(audio.getvalue(), nom_fichier=audio.name).texte
+            except ErreurTranscription as erreur:
+                st.error(str(erreur))
+                return None
 
     def _contient_image(self) -> bool:
         return any(message.get("image") for message in self.historique)
@@ -71,14 +96,26 @@ class InterfaceChat:
 
     def traiter_saisie(self) -> None:
         saisie = st.chat_input(
-            "Pose ta question ou joins une photo…",
+            "Pose ta question, joins une photo ou dicte avec le micro…",
             accept_file=True,
             file_type=ServiceImage.FORMATS_ACCEPTES,
+            accept_audio=True,
+            audio_sample_rate=config.AUDIO_FREQUENCE_HZ,
         )
         if not saisie:
             return
 
-        question = saisie.text or "Décris cette image."
+        # Message vocal : on le transcrit, puis il est traité comme un message écrit
+        vocal = saisie.audio is not None
+        if vocal:
+            question = self._transcrire(saisie.audio)
+            if question is None:
+                return
+            if saisie.text:
+                question = f"{saisie.text}\n\n{question}"
+        else:
+            question = saisie.text or "Décris cette image."
+
         image = None
         if saisie.files:
             try:
@@ -90,12 +127,14 @@ class InterfaceChat:
         message = {"role": "user", "content": question}
         if image:
             message["image"] = image
+        if vocal:
+            message["vocal"] = True
         self.historique.append(message)
 
         with st.chat_message("user"):
             if image:
                 st.image(image, width=300)
-            st.markdown(question)
+            self._afficher_texte(message)
 
         service = self.service_vision if self._contient_image() else self.service_texte
         with st.chat_message("assistant"):
@@ -111,4 +150,5 @@ class InterfaceChat:
 
 
 st.set_page_config(page_title="Coach de révision", page_icon="🎓")
-InterfaceChat(obtenir_service_llm(), obtenir_service_vision(), ServiceImage()).lancer()
+InterfaceChat(obtenir_service_llm(), obtenir_service_vision(), ServiceImage(),
+              obtenir_service_stt()).lancer()

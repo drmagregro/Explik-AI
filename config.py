@@ -36,7 +36,11 @@ PARAMETRES_RAISONNEMENT = {
     "qwen/qwen3.8-27b": {"reasoning_effort": REASONING_EFFORT, "reasoning_format": "hidden"},
 }
 
-
+# Transcription vocale (Whisper chez Groq)
+STT_MODEL = "whisper-large-v3-turbo"
+STT_LANGUE = "fr"
+STT_TIMEOUT_SECONDES = 30
+AUDIO_FREQUENCE_HZ = 16000
 IMAGE_COTE_MAX = 1600       
 IMAGE_QUALITE_JPEG = 85    
 
