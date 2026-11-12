@@ -26,7 +26,7 @@ GROQ_API_KEY = _cle_obligatoire("GROQ_API_KEY")
 LLM_MODEL = "openai/gpt-oss-120b"
 
 
-TEMPERATURE = 0
+TEMPERATURE = 0.7
 MAX_TOKENS = 1024   
 REASONING_EFFORT = "low" 
 
