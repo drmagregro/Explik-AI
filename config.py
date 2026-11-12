@@ -24,11 +24,21 @@ def _cle_obligatoire(nom: str) -> str:
 GROQ_API_KEY = _cle_obligatoire("GROQ_API_KEY")
 
 LLM_MODEL = "openai/gpt-oss-120b"
-
+VISION_MODEL = "qwen/qwen3.8-27b"   
 
 TEMPERATURE = 0.7
 MAX_TOKENS = 1024   
-REASONING_EFFORT = "low" 
+REASONING_EFFORT = "low"   
+
+
+PARAMETRES_RAISONNEMENT = {
+    "openai/gpt-oss-120b": {"reasoning_effort": REASONING_EFFORT, "include_reasoning": False},
+    "qwen/qwen3.8-27b": {"reasoning_effort": REASONING_EFFORT, "reasoning_format": "hidden"},
+}
+
+
+IMAGE_COTE_MAX = 1600       
+IMAGE_QUALITE_JPEG = 85    
 
 
 PROMPTS_DIR = ROOT_DIR / "prompts"
