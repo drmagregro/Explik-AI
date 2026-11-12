@@ -39,19 +39,33 @@ class ServiceLLM:
             tokens_entree=usage.prompt_tokens,
             tokens_sortie=usage.completion_tokens,
         )
+    
+    def generer_stream(self, messages: list[dict], temperature: float | None = None):
+        """Produit la réponse morceau par morceau, au fil de la génération."""
+        flux = self._client.chat.completions.create(
+            model=self.modele,
+            messages=messages,
+            temperature=self.temperature if temperature is None else temperature,
+            max_completion_tokens=config.MAX_TOKENS,
+            reasoning_effort=config.REASONING_EFFORT,
+            include_reasoning=False,
+            stream=True,
+        )
+        for morceau in flux:
+            texte = morceau.choices[0].delta.content
+            if texte:
+                yield texte
 
 
 if __name__ == "__main__":
-   
+
     service = ServiceLLM()
     question = input("Pose ta question :\n> ")
     conversation = [
         {"role": "system", "content": "Tu es un assistant qui répond en français."},
         {"role": "user", "content": question},
     ]
-    for temp in (0.0, 1.0):
-        resultat = service.generer(conversation, temperature=temp)
-        print(f"\n--- temperature {temp} ---")
-        print(resultat.texte)
-        print(f"[tokens : {resultat.tokens_entree} en entrée, "
-              f"{resultat.tokens_sortie} en sortie, {resultat.tokens_total} au total]")
+    print("\n--- réponse en streaming ---")
+    for morceau in service.generer_stream(conversation):
+        print(morceau, end="", flush=True)
+    print()
