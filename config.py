@@ -27,7 +27,8 @@ LLM_MODEL = "openai/gpt-oss-120b"
 VISION_MODEL = "qwen/qwen3.8-27b"   
 
 TEMPERATURE = 0.7
-MAX_TOKENS = 1024   
+MAX_TOKENS = 1024
+MAX_ECHANGES_HISTORIQUE = 50   
 REASONING_EFFORT = "low"   
 
 
