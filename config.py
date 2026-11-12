@@ -28,7 +28,10 @@ LLM_MODEL = "openai/gpt-oss-120b"
 
 TEMPERATURE = 0.7
 MAX_TOKENS = 1024   
-REASONING_EFFORT = "low" 
+REASONING_EFFORT = "low"
+
+# Mémoire : nombre d'échanges (question + réponse) renvoyés au modèle à chaque appel
+MAX_ECHANGES_HISTORIQUE = 10
 
 
 PROMPTS_DIR = ROOT_DIR / "prompts"
