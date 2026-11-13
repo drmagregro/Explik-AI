@@ -1,5 +1,27 @@
 # Explik-AI
 
+## Base de données
+
+Le coach garde en mémoire tout ce qui doit survivre à la fermeture de l'application
+(profil de l'élève, matières, chapitres, notions, objectifs, séances de révision et
+réponses aux quiz) dans une base **SQLite** : un simple fichier, `data/coach.db`,
+sans serveur à installer, grâce au module `sqlite3` inclus dans Python.
+
+- **Création automatique** : la base et ses tables sont créées au premier lancement,
+  à partir du plan décrit dans `storage/schema.sql`. Rien à faire à la main.
+- **Un seul point d'accès** : toutes les lectures et écritures passent par la classe
+  `BaseDeDonnees` (`storage/database.py`). C'est le seul fichier qui contient du SQL,
+  toujours avec des requêtes paramétrées pour se protéger des injections SQL.
+- **Suivi des notions ratées** : chaque réponse à chaque question est enregistrée avec
+  sa notion. C'est ce qui permet au coach de savoir ce que l'élève maîtrise ou non,
+  et de planifier les révisions en conséquence.
+- **Données de test** : `python -m storage.seed` remplit la base avec une élève fictive
+  et un historique de révisions, pour tester l'application sans tout saisir à la main.
+  Attention, cette commande efface la base existante.
+- **Confidentialité** : le dossier `data/` est exclu de Git (`.gitignore`). Les données
+  de l'élève restent sur son ordinateur. Ni la voix ni les photos ne sont stockées :
+  seul le texte utile au suivi est conservé.
+
 ## Mémoire de la conversation
 
 Le modèle n'a aucune mémoire : à chaque appel, on lui renvoie le prompt système (lu depuis `prompts/system.md`) suivi de l'historique. C'est ce qui lui permet de se souvenir, par exemple, d'un prénom donné plus tôt.
