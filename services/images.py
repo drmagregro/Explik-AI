@@ -4,9 +4,10 @@ import io
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 import config
+from services.erreurs import ErreurService
 
 
-class ImageInvalide(Exception):
+class ImageInvalide(ErreurService):
     """Le fichier reçu n'est pas une image lisible."""
 
 

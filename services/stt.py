@@ -4,9 +4,10 @@ from dataclasses import dataclass
 import groq
 
 import config
+from services.erreurs import ErreurService, traduire_erreur_groq
 
 
-class ErreurTranscription(Exception):
+class ErreurTranscription(ErreurService):
     """L'audio n'a pas pu être transcrit. Le message est prêt à afficher."""
 
 
@@ -37,14 +38,8 @@ class ServiceSTT:
                 response_format="text",
                 temperature=0,
             )
-        except groq.AuthenticationError as erreur:
-            raise ErreurTranscription("Clé API Groq refusée : vérifie .env.") from erreur
-        except groq.RateLimitError as erreur:
-            raise ErreurTranscription("Quota atteint (429). Attends une minute.") from erreur
-        except groq.APIConnectionError as erreur:
-            raise ErreurTranscription("Impossible de joindre le service de transcription.") from erreur
-        except groq.APIStatusError as erreur:
-            raise ErreurTranscription("La transcription a échoué.") from erreur
+        except groq.APIError as erreur:
+            raise traduire_erreur_groq(erreur) from erreur
         duree = time.perf_counter() - debut
 
         texte = texte.strip()

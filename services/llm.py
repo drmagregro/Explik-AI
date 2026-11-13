@@ -1,6 +1,8 @@
 from dataclasses import dataclass
-from groq import Groq
+import groq
+
 import config
+from services.erreurs import traduire_erreur_groq
 
 
 @dataclass
@@ -18,7 +20,8 @@ class ReponseLLM:
 class ServiceLLM:
 
     def __init__(self, modele: str | None = None, temperature: float | None = None):
-        self._client = Groq(api_key=config.GROQ_API_KEY)
+        self._client = groq.Groq(api_key=config.GROQ_API_KEY,
+                                 timeout=config.LLM_TIMEOUT_SECONDES)
         self.modele = modele or config.LLM_MODEL
         self.temperature = config.TEMPERATURE if temperature is None else temperature
 
@@ -42,16 +45,6 @@ class ServiceLLM:
         prompt = {"role": "system", "content": ServiceLLM.charger_prompt_systeme()}
         return [prompt] + recents
 
-    def generer(self, messages: list[dict], temperature: float | None = None) -> ReponseLLM:
-        messages = self.preparer_messages(messages)
-        reponse = self._client.chat.completions.create(
-            model=self.modele,
-            messages=messages,
-            temperature=self.temperature if temperature is None else temperature,
-            max_completion_tokens=config.MAX_TOKENS,
-            reasoning_effort=config.REASONING_EFFORT,
-            include_reasoning=False,  
-        )
     @classmethod
     def vision(cls) -> "ServiceLLM":
         return cls(modele=config.VISION_MODEL)
@@ -66,7 +59,11 @@ class ServiceLLM:
         }
 
     def generer(self, messages: list[dict], temperature: float | None = None) -> ReponseLLM:
-        reponse = self._client.chat.completions.create(**self._parametres(messages, temperature))
+        messages = self.preparer_messages(messages)
+        try:
+            reponse = self._client.chat.completions.create(**self._parametres(messages, temperature))
+        except groq.APIError as erreur:
+            raise traduire_erreur_groq(erreur) from erreur
         usage = reponse.usage
         return ReponseLLM(
             texte=reponse.choices[0].message.content or "",
@@ -77,16 +74,19 @@ class ServiceLLM:
     def generer_stream(self, messages: list[dict], temperature: float | None = None):
         """Produit la réponse morceau par morceau, au fil de la génération."""
         messages = self.preparer_messages(messages)
-        flux = self._client.chat.completions.create(
-            **self._parametres(messages, temperature),
-            stream=True,
-        )
-        for morceau in flux:
-            if not morceau.choices:
-                continue
-            texte = morceau.choices[0].delta.content
-            if texte:
-                yield texte
+        try:
+            flux = self._client.chat.completions.create(
+                **self._parametres(messages, temperature),
+                stream=True,
+            )
+            for morceau in flux:
+                if not morceau.choices:
+                    continue
+                texte = morceau.choices[0].delta.content
+                if texte:
+                    yield texte
+        except groq.APIError as erreur:
+            raise traduire_erreur_groq(erreur) from erreur
 
 
 if __name__ == "__main__":

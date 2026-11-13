@@ -37,6 +37,8 @@ PARAMETRES_RAISONNEMENT = {
     "qwen/qwen3.8-27b": {"reasoning_effort": REASONING_EFFORT, "reasoning_format": "hidden"},
 }
 
+LLM_TIMEOUT_SECONDES = 30
+
 # Transcription vocale (Whisper chez Groq)
 STT_MODEL = "whisper-large-v3-turbo"
 STT_LANGUE = "fr"
