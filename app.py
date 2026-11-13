@@ -2,9 +2,10 @@ import streamlit as st
 
 import config
 
-from services.images import ImageInvalide, ServiceImage
+from services.erreurs import ErreurService
+from services.images import ServiceImage
 from services.llm import ServiceLLM
-from services.stt import ErreurTranscription, ServiceSTT
+from services.stt import ServiceSTT
 
 
 @st.cache_resource
@@ -67,7 +68,7 @@ class InterfaceChat:
         with st.spinner("Transcription en cours…"):
             try:
                 return self.service_stt.transcrire(audio.getvalue(), nom_fichier=audio.name).texte
-            except ErreurTranscription as erreur:
+            except ErreurService as erreur:
                 st.error(str(erreur))
                 return None
 
@@ -120,7 +121,7 @@ class InterfaceChat:
         if saisie.files:
             try:
                 image = self.service_image.preparer(saisie.files[0].getvalue())
-            except ImageInvalide as erreur:
+            except ErreurService as erreur:
                 st.error(str(erreur))
                 return
 
@@ -139,7 +140,13 @@ class InterfaceChat:
         service = self.service_vision if self._contient_image() else self.service_texte
         with st.chat_message("assistant"):
             # write_stream affiche les morceaux au fil de l'eau et renvoie le texte complet
-            texte = st.write_stream(service.generer_stream(self._messages_pour_api()))
+            try:
+                texte = st.write_stream(service.generer_stream(self._messages_pour_api()))
+            except ErreurService as erreur:
+                st.error(str(erreur))
+                # on retire la question restée sans réponse : l'utilisateur peut la renvoyer
+                self.historique.pop()
+                return
 
         self.historique.append({"role": "assistant", "content": texte})
 
