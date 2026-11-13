@@ -45,7 +45,8 @@ AUDIO_FREQUENCE_HZ = 16000
 IMAGE_COTE_MAX = 1600       
 IMAGE_QUALITE_JPEG = 85    
 
-
+# Boucle agentique (tool calling)
+MAX_TOURS_AGENT = 5   # appels d'outils au maximum avant de forcer une réponse finale
 PROMPTS_DIR = ROOT_DIR / "prompts"
 DATA_DIR = ROOT_DIR / "data"
 DB_PATH = DATA_DIR / "coach.db" 
