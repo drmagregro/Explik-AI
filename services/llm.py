@@ -182,6 +182,11 @@ if __name__ == "__main__":
     question = input("Pose ta question :\n> ")
     conversation = [{"role": "user", "content": question}]
 
+    print("\n--- réponse en streaming ---")
+    for morceau in service.generer_stream(conversation):
+        print(morceau, end="", flush=True)
+    print()
+
     if "--agent" in sys.argv:
         # Test de la boucle agentique : python -m services.llm --agent
         from tools import creer_outils_coach
