@@ -48,3 +48,4 @@ IMAGE_QUALITE_JPEG = 85
 
 PROMPTS_DIR = ROOT_DIR / "prompts"
 DATA_DIR = ROOT_DIR / "data"
+DB_PATH = DATA_DIR / "coach.db" 
