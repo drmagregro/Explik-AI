@@ -171,7 +171,7 @@ feature/<nom>        une branche par fonctionnalité, créée depuis dev
 
 1. Créer sa branche depuis `dev` à jour :
    ```bash
-   git checkout dev && git pull && git checkout -b feature/<nom>
+   git checkout dev && git pull && git switch -c < nom de la branche >
    ```
 2. Faire des petits commits, avec le format `feature: …` ou `fix: …`.
 3. Récupérer `dev` chaque jour (`git pull origin dev`) pour voir les conflits tôt.
