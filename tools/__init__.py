@@ -96,7 +96,10 @@ def creer_outils_coach(base: BaseDeDonnees | None = None) -> BoiteAOutils:
                    "required": ["chapitre_id"]}
     aucun = {"type": "object", "properties": {}}
 
+    from tools.contenus import creer_outil_fiche   # import ici : tools.contenus importe ce fichier
+
     return BoiteAOutils([
+        creer_outil_fiche(base),
         Outil("date_du_jour", "Donne la date d'aujourd'hui, pour calculer un délai ou planifier.",
               aucun, date_du_jour),
         Outil("obtenir_profil", "Lit le profil de l'élève : prénom, objectif, échéance, "
