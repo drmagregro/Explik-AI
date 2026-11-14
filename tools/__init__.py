@@ -64,7 +64,7 @@ class BoiteAOutils:
 
 # --- Les outils du coach (lecture seule) ----------------------------------------
 
-def creer_outils_coach(base: BaseDeDonnees | None = None) -> BoiteAOutils:
+def lister_outils_coach(base: BaseDeDonnees | None = None) -> list[Outil]:
     base = base or BaseDeDonnees()
 
     def date_du_jour():
@@ -96,7 +96,7 @@ def creer_outils_coach(base: BaseDeDonnees | None = None) -> BoiteAOutils:
                    "required": ["chapitre_id"]}
     aucun = {"type": "object", "properties": {}}
 
-    return BoiteAOutils([
+    return [
         Outil("date_du_jour", "Donne la date d'aujourd'hui, pour calculer un délai ou planifier.",
               aucun, date_du_jour),
         Outil("obtenir_profil", "Lit le profil de l'élève : prénom, objectif, échéance, "
@@ -110,4 +110,18 @@ def creer_outils_coach(base: BaseDeDonnees | None = None) -> BoiteAOutils:
               id_chapitre, notions_a_revoir),
         Outil("lister_objectifs", "Liste les objectifs de révision de l'élève, avec date limite "
               "et priorité.", aucun, lister_objectifs),
-    ])
+    ]
+
+
+def creer_outils_coach(base: BaseDeDonnees | None = None) -> BoiteAOutils:
+    """Tous les outils du coach dans une seule boîte."""
+    return BoiteAOutils(lister_outils_coach(base))
+
+
+def choisir_outils(*noms: str, base: BaseDeDonnees | None = None) -> list[Outil]:
+    """Les outils du coach dont le nom est donné : chaque agent n'a accès qu'à ceux-là."""
+    outils = {outil.nom: outil for outil in lister_outils_coach(base)}
+    inconnus = set(noms) - outils.keys()
+    if inconnus:
+        raise ValueError(f"Outils inconnus : {', '.join(sorted(inconnus))}")
+    return [outils[nom] for nom in noms]

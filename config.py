@@ -49,6 +49,7 @@ IMAGE_QUALITE_JPEG = 85
 
 # Boucle agentique (tool calling)
 MAX_TOURS_AGENT = 5   # appels d'outils au maximum avant de forcer une réponse finale
+CONTEXTE_AGENT_ECHANGES = 3   # derniers échanges transmis à un agent quand l'orchestrateur lui délègue
 PROMPTS_DIR = ROOT_DIR / "prompts"
 DATA_DIR = ROOT_DIR / "data"
 DB_PATH = DATA_DIR / "coach.db" 
