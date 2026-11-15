@@ -11,7 +11,7 @@ from agents.lecture import AgentLecture
 from agents.quiz import AgentQuiz
 from agents.suivi import AgentSuivi
 from services.llm import ReponseAgent, ServiceLLM
-from tools import BoiteAOutils, Outil
+from tools import BoiteAOutils, Outil, ValidationRequise
 
 
 class Orchestrateur(Agent):
@@ -37,16 +37,22 @@ class Orchestrateur(Agent):
         - chaque agent reçoit aussi les derniers échanges de la conversation ;
         - si un agent a répondu, c'est sa réponse qu'on renvoie telle quelle. En la
           réécrivant, l'orchestrateur perdait parfois tout son contenu (un planning
-          réduit à « Voici ton planning »).
+          réduit à « Voici ton planning ») ;
+        - si un agent demande une action sensible, on renvoie une réponse en attente.
 
         Les outils sont recréés à chaque appel plutôt que de stocker la conversation
         dans l'objet : l'orchestrateur est partagé par toutes les sessions Streamlit.
         """
         journal: list[ReponseAgent] = []
         outils = [agent.comme_outil(messages, journal) for agent in self.agents]
-        reponse = self.service.generer_avec_outils(
-            messages, BoiteAOutils(outils), prompt_systeme=self.prompt(),
-        )
+        try:
+            reponse = self.service.generer_avec_outils(
+                messages, BoiteAOutils(outils), prompt_systeme=self.prompt(),
+            )
+        except ValidationRequise as pause:
+            # Un agent attend la décision de l'élève : la demande s'arrête ici.
+            # À la reprise (reprendre), c'est la réponse de l'agent qui sera montrée.
+            return ReponseAgent("", [], 0, 0, en_attente=pause.action)
         if journal:
             reponse.texte = journal[-1].texte
         return reponse

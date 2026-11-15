@@ -4,8 +4,9 @@ Un outil = un nom, une description (c'est ce qui aide le modèle à choisir le b
 des paramètres décrits en JSON Schema, et la fonction Python qui fait le travail.
 Le modèle n'exécute jamais rien lui-même : il demande, BoiteAOutils exécute.
 
-Ces outils ne font que LIRE la base. Un outil qui modifie ou envoie quelque chose
-devra passer par la validation humaine (tâche 16).
+Validation humaine (tâche 16) : un outil irréversible ou visible par d'autres est marqué
+sensible=True. La boucle agentique ne l'exécute jamais d'elle-même : elle s'arrête, l'interface
+affiche son résumé, et l'outil ne tourne qu'après un clic sur « Confirmer ».
 """
 import json
 from dataclasses import dataclass
@@ -23,6 +24,8 @@ class Outil:
     description: str
     parametres: dict          # JSON Schema des arguments
     fonction: Callable
+    sensible: bool = False            # irréversible ou visible par d'autres : validation humaine
+    resumer: Callable | None = None   # arguments -> phrase que l'élève lit avant de confirmer
 
     def schema(self) -> dict:
         """Description de l'outil au format attendu par l'API."""
@@ -31,6 +34,18 @@ class Outil:
             "function": {"name": self.nom, "description": self.description,
                          "parameters": self.parametres},
         }
+
+
+class ValidationRequise(Exception):
+    """Un agent délégué attend la décision de l'élève sur une action sensible.
+
+    BoiteAOutils la laisse remonter au lieu de la renvoyer au modèle comme une erreur :
+    c'est l'orchestrateur qui la rattrape pour mettre toute la demande en pause.
+    """
+
+    def __init__(self, action):
+        super().__init__(action.resume)
+        self.action = action
 
 
 class BoiteAOutils:
@@ -42,18 +57,35 @@ class BoiteAOutils:
     def schemas(self) -> list[dict]:
         return [outil.schema() for outil in self._outils.values()]
 
-    def executer(self, nom: str, arguments_json: str) -> str:
+    def est_sensible(self, nom: str) -> bool:
+        outil = self._outils.get(nom)
+        return outil is not None and outil.sensible
+
+    def resumer(self, nom: str, arguments_json: str) -> str:
+        """La phrase affichée à l'élève avant de confirmer une action sensible."""
+        try:
+            return self._outils[nom].resumer(**json.loads(arguments_json or "{}"))
+        except Exception:
+            return f"{nom}({arguments_json})"   # pas de résumé possible : on montre l'appel brut
+
+    def executer(self, nom: str, arguments_json: str, confirme: bool = False) -> str:
         """Exécute un outil et renvoie son résultat en texte JSON.
 
-        Ne lève jamais d'erreur : une erreur est renvoyée au modèle comme résultat,
-        pour qu'il puisse corriger sa demande au tour suivant.
+        Ne lève jamais d'erreur (sauf ValidationRequise) : une erreur est renvoyée au modèle
+        comme résultat, pour qu'il puisse corriger sa demande au tour suivant.
+        Un outil sensible ne s'exécute qu'avec confirme=True, donné après le clic de l'élève.
         """
         outil = self._outils.get(nom)
         if outil is None:
             return json.dumps({"erreur": f"Outil inconnu : {nom}"}, ensure_ascii=False)
+        if outil.sensible and not confirme:
+            return json.dumps({"erreur": "Cette action demande la confirmation de l'élève."},
+                              ensure_ascii=False)
         try:
             arguments = json.loads(arguments_json or "{}")
             resultat = outil.fonction(**arguments)
+        except ValidationRequise:
+            raise
         except (json.JSONDecodeError, TypeError) as erreur:
             return json.dumps({"erreur": f"Arguments invalides : {erreur}"}, ensure_ascii=False)
         except Exception as erreur:
@@ -62,7 +94,7 @@ class BoiteAOutils:
         return texte[:TAILLE_MAX_RESULTAT]
 
 
-# --- Les outils du coach (lecture seule) ----------------------------------------
+# --- Les outils du coach -------------------------------------------------------
 
 def lister_outils_coach(base: BaseDeDonnees | None = None) -> list[Outil]:
     base = base or BaseDeDonnees()
@@ -90,11 +122,26 @@ def lister_outils_coach(base: BaseDeDonnees | None = None) -> list[Outil]:
     def lister_objectifs():
         return base.lister_objectifs()
 
+    def supprimer_objectif(objectif_id: int):
+        if not base.supprimer_objectif(objectif_id):
+            return {"erreur": f"Aucun objectif avec l'id {objectif_id}."}
+        return {"supprime": objectif_id}
+
+    def resumer_suppression(objectif_id: int) -> str:
+        objectif = base.obtenir_objectif(objectif_id)
+        if objectif is None:
+            return f"Supprimer l'objectif n°{objectif_id} (introuvable)"
+        return f"Supprimer définitivement l'objectif « {objectif['intitule']} »"
+
     id_chapitre = {"type": "object",
                    "properties": {"chapitre_id": {"type": "integer",
                                                   "description": "Identifiant du chapitre, donné par lister_chapitres."}},
                    "required": ["chapitre_id"]}
     aucun = {"type": "object", "properties": {}}
+    id_objectif = {"type": "object",
+                   "properties": {"objectif_id": {"type": "integer",
+                                                  "description": "Identifiant de l'objectif, donné par lister_objectifs."}},
+                   "required": ["objectif_id"]}
 
     return [
         Outil("date_du_jour", "Donne la date d'aujourd'hui, pour calculer un délai ou planifier.",
@@ -110,6 +157,10 @@ def lister_outils_coach(base: BaseDeDonnees | None = None) -> list[Outil]:
               id_chapitre, notions_a_revoir),
         Outil("lister_objectifs", "Liste les objectifs de révision de l'élève, avec date limite "
               "et priorité.", aucun, lister_objectifs),
+        Outil("supprimer_objectif", "Supprime définitivement un objectif de l'élève. Uniquement "
+              "s'il le demande. L'appel affiche lui-même une confirmation à l'élève : ne la demande "
+              "pas par écrit avant.",
+              id_objectif, supprimer_objectif, sensible=True, resumer=resumer_suppression),
     ]
 
 

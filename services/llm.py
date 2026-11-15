@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, field
 import groq
 
 import config
@@ -27,12 +28,35 @@ class AppelOutil:
 
 
 @dataclass
+class EtatBoucle:
+    """Où en est une boucle agentique : de quoi la mettre en pause, puis la reprendre."""
+
+    messages: list[dict]
+    boite: object
+    max_tours: int
+    tour: int = 0
+    appels: list[AppelOutil] = field(default_factory=list)
+    tokens: int = 0
+    a_traiter: list[dict] = field(default_factory=list)   # outils demandés, pas encore exécutés
+
+
+@dataclass
+class ActionEnAttente:
+    """Un outil sensible que le modèle veut appeler : rien ne s'exécute avant la décision de l'élève."""
+
+    resume: str                # ce que l'élève lit : « Supprimer définitivement l'objectif … »
+    etat: EtatBoucle
+    agent: str | None = None   # l'agent qui la demande, quand elle vient d'une délégation
+
+
+@dataclass
 class ReponseAgent:
 
     texte: str
     appels: list[AppelOutil]
     tours: int
     tokens_total: int
+    en_attente: ActionEnAttente | None = None   # rempli quand la boucle s'est mise en pause
 
 
 class ServiceLLM:
@@ -141,20 +165,60 @@ class ServiceLLM:
         2. Le modèle répond, ou demande un outil.
         3. On exécute l'outil et on ajoute son résultat à la conversation.
         4. On recommence, au plus max_tours fois : jamais de boucle sans fin.
-        """
-        max_tours = max_tours or config.MAX_TOURS_AGENT
-        messages = self.preparer_messages(historique, prompt_systeme)
-        appels: list[AppelOutil] = []
-        tokens = 0
 
-        for tour in range(1, max_tours + 1):
-            reponse = self._appeler_avec_outils(messages, boite)
-            tokens += reponse.usage.total_tokens
+        Un outil sensible n'est pas exécuté : la boucle se met en pause et renvoie
+        une réponse avec en_attente. On la reprend avec reprendre().
+        """
+        etat = EtatBoucle(self.preparer_messages(historique, prompt_systeme), boite,
+                          max_tours or config.MAX_TOURS_AGENT)
+        return self._boucle(etat)
+
+    def reprendre(self, action: ActionEnAttente, accepte: bool) -> ReponseAgent:
+        """Reprend une boucle en pause, une fois que l'élève a confirmé ou annulé.
+
+        Confirmer exécute l'outil ; annuler renvoie au modèle un refus à la place du résultat.
+        Dans les deux cas le modèle continue et peut en tenir compte dans sa réponse.
+        """
+        etat = action.etat
+        appel = etat.a_traiter[0]["function"]
+        if accepte:
+            resultat = etat.boite.executer(appel["name"], appel["arguments"], confirme=True)
+        else:
+            resultat = json.dumps({"refus": "Action refusée par l'utilisateur. Ne la retente pas "
+                                            "sans nouvelle demande de sa part."}, ensure_ascii=False)
+        self._ajouter_resultat(etat, resultat)
+        return self._boucle(etat)
+
+    @staticmethod
+    def _ajouter_resultat(etat: EtatBoucle, resultat: str) -> None:
+        """Range le résultat du prochain outil à traiter, relié à sa demande par tool_call_id."""
+        appel = etat.a_traiter.pop(0)
+        nom, arguments = appel["function"]["name"], appel["function"]["arguments"]
+        etat.appels.append(AppelOutil(nom, arguments, resultat))
+        etat.messages.append({"role": "tool", "tool_call_id": appel["id"],
+                              "name": nom, "content": resultat})
+
+    def _boucle(self, etat: EtatBoucle) -> ReponseAgent:
+        while True:
+            # Les outils demandés au tour précédent ; un outil sensible met tout en pause
+            while etat.a_traiter:
+                appel = etat.a_traiter[0]["function"]
+                if etat.boite.est_sensible(appel["name"]):
+                    resume = etat.boite.resumer(appel["name"], appel["arguments"])
+                    return ReponseAgent("", etat.appels, etat.tour, etat.tokens,
+                                        en_attente=ActionEnAttente(resume, etat))
+                self._ajouter_resultat(etat, etat.boite.executer(appel["name"], appel["arguments"]))
+
+            if etat.tour == etat.max_tours:
+                break
+            etat.tour += 1
+            reponse = self._appeler_avec_outils(etat.messages, etat.boite)
+            etat.tokens += reponse.usage.total_tokens
             message = reponse.choices[0].message
             if not message.tool_calls:   # pas d'outil demandé : c'est la réponse finale
-                return ReponseAgent(message.content or "", appels, tour, tokens)
+                return ReponseAgent(message.content or "", etat.appels, etat.tour, etat.tokens)
 
-            # On garde la demande du modèle dans la conversation…
+            # On garde la demande du modèle dans la conversation, puis on traite ses outils
             demande = {"role": "assistant", "tool_calls": [
                 {"id": appel.id, "type": "function",
                  "function": {"name": appel.function.name, "arguments": appel.function.arguments}}
@@ -162,19 +226,14 @@ class ServiceLLM:
             ]}
             if message.content:
                 demande["content"] = message.content
-            messages.append(demande)
-
-            # …puis le résultat de chaque outil, relié à sa demande par tool_call_id
-            for appel in message.tool_calls:
-                resultat = boite.executer(appel.function.name, appel.function.arguments)
-                appels.append(AppelOutil(appel.function.name, appel.function.arguments, resultat))
-                messages.append({"role": "tool", "tool_call_id": appel.id,
-                                 "name": appel.function.name, "content": resultat})
+            etat.messages.append(demande)
+            etat.a_traiter = list(demande["tool_calls"])
 
         # Nombre de tours atteint : on interdit les outils pour obtenir une réponse
-        reponse = self._appeler_avec_outils(messages, boite, tool_choice="none")
-        tokens += reponse.usage.total_tokens
-        return ReponseAgent(reponse.choices[0].message.content or "", appels, max_tours, tokens)
+        reponse = self._appeler_avec_outils(etat.messages, etat.boite, tool_choice="none")
+        etat.tokens += reponse.usage.total_tokens
+        return ReponseAgent(reponse.choices[0].message.content or "", etat.appels,
+                            etat.max_tours, etat.tokens)
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ import config
 from agents.orchestrateur import Orchestrateur
 from services.erreurs import ErreurService
 from services.images import ServiceImage
-from services.llm import ServiceLLM
+from services.llm import ActionEnAttente, ServiceLLM
 from services.stt import ServiceSTT
 
 
@@ -32,6 +32,7 @@ def obtenir_orchestrateur() -> Orchestrateur:
 class InterfaceChat:
 
     CLE_HISTORIQUE = "messages"
+    CLE_ACTION = "action_en_attente"   # action sensible qui attend Confirmer / Annuler
 
     def __init__(self, orchestrateur: Orchestrateur, service_vision: ServiceLLM,
                  service_image: ServiceImage, service_stt: ServiceSTT):
@@ -53,6 +54,7 @@ class InterfaceChat:
             st.title("Coach de révision")
             if st.button("Nouvelle conversation", width="stretch"):
                 st.session_state[self.CLE_HISTORIQUE] = []
+                st.session_state.pop(self.CLE_ACTION, None)
                 st.rerun()
 
     def afficher_historique(self) -> None:
@@ -69,7 +71,41 @@ class InterfaceChat:
             st.caption("🎤 Message dicté, transcription automatique :")
         if message.get("agents"):
             st.caption("🤖 " + ", ".join(message["agents"]))
+        if message.get("decision"):
+            st.caption(message["decision"])
         st.markdown(message["content"])
+
+    def afficher_validation(self) -> None:
+        """Le modèle propose, l'élève décide : une action sensible attend un clic.
+
+        Streamlit relance tout le script à chaque clic : l'action en attente vit donc
+        dans session_state, pas dans une variable.
+        """
+        action: ActionEnAttente | None = st.session_state.get(self.CLE_ACTION)
+        if action is None:
+            return
+        with st.chat_message("assistant"):
+            st.warning(f"**Action à confirmer** : {action.resume}", icon="⚠️")
+            confirmer, annuler = st.columns(2)
+            if confirmer.button("Confirmer", type="primary", width="stretch"):
+                self._decider(action, accepte=True)
+            if annuler.button("Annuler", width="stretch"):
+                self._decider(action, accepte=False)
+
+    def _decider(self, action: ActionEnAttente, accepte: bool) -> None:
+        """Exécute (ou refuse) l'action, puis laisse l'agent terminer sa réponse."""
+        # La décision est prise : on la retire tout de suite pour qu'elle ne serve qu'une fois
+        del st.session_state[self.CLE_ACTION]
+        decision = ("✅ Confirmé : " if accepte else "❌ Annulé : ") + action.resume
+        with st.spinner("Le coach reprend…"):
+            try:
+                texte = self.orchestrateur.reprendre(action, accepte).texte
+            except ErreurService as erreur:
+                texte = f"Le coach n'a pas pu terminer sa réponse : {erreur}"
+        agents = [action.agent.capitalize()] if action.agent else []
+        self.historique.append({"role": "assistant", "content": texte, "agents": agents,
+                                "decision": decision})
+        st.rerun()
 
     def _transcrire(self, audio) -> str | None:
         """Transcrit l'audio du micro. Renvoie None (et affiche l'erreur) en cas d'échec."""
@@ -110,6 +146,8 @@ class InterfaceChat:
             file_type=ServiceImage.FORMATS_ACCEPTES,
             accept_audio=True,
             audio_sample_rate=config.AUDIO_FREQUENCE_HZ,
+            # Pas de nouvelle question tant qu'une action attend la décision de l'élève
+            disabled=self.CLE_ACTION in st.session_state,
         )
         if not saisie:
             return
@@ -154,14 +192,17 @@ class InterfaceChat:
                 self.historique.pop()
                 return
 
+        if reponse is None:   # une action attend la confirmation : on affiche les boutons
+            st.rerun()
         self.historique.append(reponse)
 
-    def _repondre(self) -> dict:
+    def _repondre(self) -> dict | None:
         """Affiche la réponse du coach et la renvoie, prête à entrer dans l'historique.
 
         Avec une image : le modèle vision, en streaming (l'agent Lecture ne lit pas encore les photos).
         Sinon : l'orchestrateur, qui répond lui-même ou délègue à un agent. Sa réponse arrive
         d'un bloc, après la boucle des agents, donc sans streaming.
+        Renvoie None si un agent demande une action sensible : elle attend dans session_state.
         """
         if self._contient_image():
             # write_stream affiche les morceaux au fil de l'eau et renvoie le texte complet
@@ -170,6 +211,9 @@ class InterfaceChat:
 
         with st.spinner("Le coach réfléchit…"):
             resultat = self.orchestrateur.run(self._messages_pour_api())
+        if resultat.en_attente:
+            st.session_state[self.CLE_ACTION] = resultat.en_attente
+            return None
         # demander_agent_quiz -> Quiz : on garde seulement les agents, pas leurs outils internes
         agents = [appel.nom.removeprefix("demander_agent_").capitalize() for appel in resultat.appels]
         reponse = {"role": "assistant", "content": resultat.texte, "agents": agents}
@@ -179,6 +223,7 @@ class InterfaceChat:
     def lancer(self) -> None:
         self.afficher_barre_laterale()
         self.afficher_historique()
+        self.afficher_validation()
         self.traiter_saisie()
 
 
