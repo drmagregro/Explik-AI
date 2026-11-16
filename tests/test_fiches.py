@@ -60,6 +60,10 @@ class TestFiches(unittest.TestCase):
         noms = [s["function"]["name"] for s in boite.schemas()]
         self.assertIn("generer_fiche", noms)
 
+    def test_agent_lecture_a_l_outil(self):
+        from agents.lecture import AgentLecture
+        self.assertIn("generer_fiche", [o.nom for o in AgentLecture().outils()])
+
 
 if __name__ == "__main__":
     unittest.main()
