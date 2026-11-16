@@ -62,7 +62,9 @@ class TestFiches(unittest.TestCase):
 
     def test_agent_lecture_a_l_outil(self):
         from agents.lecture import AgentLecture
-        self.assertIn("generer_fiche", [o.nom for o in AgentLecture().outils()])
+        noms = [o.nom for o in AgentLecture().outils()]
+        self.assertIn("generer_fiche", noms)
+        self.assertIn("generer_flashcards", noms)
 
 
 JSON_OK = '[{"question": "Qu\'est-ce qu\'une dérivée ?", "reponse": "Une pente.", "notion": "Dérivée"}]'
