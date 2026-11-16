@@ -44,24 +44,25 @@ class ServiceLLM:
         self.temperature = config.TEMPERATURE if temperature is None else temperature
 
     @staticmethod
-    def charger_prompt_systeme() -> str:
-        """Lit le prompt système depuis prompts/system.md (jamais dans le code)."""
-        return (config.PROMPTS_DIR / "system.md").read_text(encoding="utf-8")
+    def charger_prompt_systeme(fichier: str = "system.md") -> str:
+        """Lit un prompt depuis prompts/ (jamais dans le code). Par défaut, celui du coach."""
+        return (config.PROMPTS_DIR / fichier).read_text(encoding="utf-8")
 
     @staticmethod
-    def preparer_messages(historique: list[dict]) -> list[dict]:
+    def preparer_messages(historique: list[dict], prompt_systeme: str | None = None) -> list[dict]:
         """Construit ce qu'on envoie au modèle : system + N derniers échanges.
 
         Le modèle n'a aucune mémoire : on lui renvoie l'historique à chaque appel.
         Un échange = 1 message user + 1 message assistant, soit N * 2 messages.
+        prompt_systeme permet à un agent d'utiliser son propre prompt à la place de system.md.
         """
         sans_system = [m for m in historique if m["role"] != "system"]
         recents = sans_system[-config.MAX_ECHANGES_HISTORIQUE * 2:]
         # la fenêtre ne doit pas commencer au milieu d'un échange
         while recents and recents[0]["role"] != "user":
             recents = recents[1:]
-        prompt = {"role": "system", "content": ServiceLLM.charger_prompt_systeme()}
-        return [prompt] + recents
+        contenu = prompt_systeme or ServiceLLM.charger_prompt_systeme()
+        return [{"role": "system", "content": contenu}] + recents
 
     @classmethod
     def vision(cls) -> "ServiceLLM":
@@ -132,7 +133,8 @@ class ServiceLLM:
                 raise traduire_erreur_groq(erreur) from erreur
 
     def generer_avec_outils(self, historique: list[dict], boite,
-                            max_tours: int | None = None) -> ReponseAgent:
+                            max_tours: int | None = None,
+                            prompt_systeme: str | None = None) -> ReponseAgent:
         """Laisse le modèle appeler des outils jusqu'à sa réponse finale.
 
         1. On envoie la conversation et la liste des outils.
@@ -141,7 +143,7 @@ class ServiceLLM:
         4. On recommence, au plus max_tours fois : jamais de boucle sans fin.
         """
         max_tours = max_tours or config.MAX_TOURS_AGENT
-        messages = self.preparer_messages(historique)
+        messages = self.preparer_messages(historique, prompt_systeme)
         appels: list[AppelOutil] = []
         tokens = 0
 
