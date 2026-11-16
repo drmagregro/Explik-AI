@@ -123,6 +123,9 @@ class BaseDeDonnees:
         return self._lire("SELECT * FROM contenus WHERE chapitre_id = ? AND type = ? ORDER BY id DESC",
                           (chapitre_id, type))
 
+    def supprimer_contenus(self, chapitre_id: int, type: str) -> None:
+        self._ecrire("DELETE FROM contenus WHERE chapitre_id = ? AND type = ?", (chapitre_id, type))
+
     # --- Objectifs ---------------------------------------------------------
 
     def ajouter_objectif(self, intitule: str, date_limite: str | None = None,
