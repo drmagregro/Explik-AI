@@ -14,13 +14,13 @@ class AgentSuivi(Agent):
     description = (
         "Agent Suivi : gère le planning de révision, l'échéance, les objectifs et la progression "
         "de l'élève (notions fragiles, résultats). À utiliser pour toute question sur le planning, "
-        "le temps restant, quoi réviser ensuite, les objectifs ou les progrès."
+        "le temps restant, quoi réviser ensuite, les objectifs (dont leur suppression) ou les progrès."
     )
     fichier_prompt = "suivi.md"
 
     def outils(self) -> list[Outil]:
         return choisir_outils("date_du_jour", "obtenir_profil", "lister_objectifs",
-                              "lister_chapitres", "notions_a_revoir")
+                              "lister_chapitres", "notions_a_revoir", "supprimer_objectif")
 
 
 if __name__ == "__main__":

@@ -9,8 +9,8 @@ Pour l'orchestrateur, chaque agent est simplement un outil de plus (comme_outil)
 from abc import ABC, abstractmethod
 
 import config
-from services.llm import ReponseAgent, ServiceLLM
-from tools import BoiteAOutils, Outil
+from services.llm import ActionEnAttente, ReponseAgent, ServiceLLM
+from tools import BoiteAOutils, Outil, ValidationRequise
 
 
 class Agent(ABC):
@@ -34,6 +34,10 @@ class Agent(ABC):
             messages, BoiteAOutils(self.outils()), prompt_systeme=self.prompt(),
         )
 
+    def reprendre(self, action: ActionEnAttente, accepte: bool) -> ReponseAgent:
+        """Termine une demande mise en pause par une action sensible, après la décision de l'élève."""
+        return self.service.reprendre(action, accepte)
+
     def comme_outil(self, conversation: list[dict] | None = None,
                     journal: list[ReponseAgent] | None = None) -> Outil:
         """Présente l'agent à l'orchestrateur comme un outil « demander_agent_<nom> ».
@@ -48,6 +52,10 @@ class Agent(ABC):
 
         def deleguer(consigne: str) -> dict:
             reponse = self.run(precedents + [{"role": "user", "content": consigne}])
+            if reponse.en_attente:
+                # L'agent attend la décision de l'élève : on remonte jusqu'à l'interface
+                reponse.en_attente.agent = self.nom
+                raise ValidationRequise(reponse.en_attente)
             if journal is not None:
                 journal.append(reponse)
             # La réponse en dernier : si le résultat est tronqué, c'est elle qui est coupée

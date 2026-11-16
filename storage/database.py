@@ -140,6 +140,14 @@ class BaseDeDonnees:
     def lister_objectifs(self) -> list[dict]:
         return self._lire("SELECT * FROM objectifs ORDER BY date_limite IS NULL, date_limite")
 
+    def obtenir_objectif(self, objectif_id: int) -> dict | None:
+        return self._lire_un("SELECT * FROM objectifs WHERE id = ?", (objectif_id,))
+
+    def supprimer_objectif(self, objectif_id: int) -> bool:
+        """Supprime un objectif. Renvoie False s'il n'existait pas."""
+        with self._connexion() as con:
+            return con.execute("DELETE FROM objectifs WHERE id = ?", (objectif_id,)).rowcount > 0
+
     # --- Séances et réponses -----------------------------------------------
 
     def ajouter_seance(self, activite: str, chapitre_id: int | None = None,
