@@ -105,6 +105,24 @@ class BaseDeDonnees:
     def lister_notions(self, chapitre_id: int) -> list[dict]:
         return self._lire("SELECT * FROM notions WHERE chapitre_id = ? ORDER BY nom", (chapitre_id,))
 
+    # --- Contenus (fiches, flashcards) -----------------------------------------
+
+    def ajouter_contenu(self, chapitre_id: int, type: str, titre: str, contenu: str,
+                        reponse: str | None = None, notion_id: int | None = None) -> int:
+        return self._ecrire(
+            "INSERT INTO contenus (chapitre_id, notion_id, type, titre, contenu, reponse) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (chapitre_id, notion_id, type, titre, contenu, reponse),
+        )
+
+    def lister_contenus(self, chapitre_id: int, type: str | None = None) -> list[dict]:
+        """Contenus d'un chapitre, le plus récent en premier."""
+        if type is None:
+            return self._lire("SELECT * FROM contenus WHERE chapitre_id = ? ORDER BY id DESC",
+                              (chapitre_id,))
+        return self._lire("SELECT * FROM contenus WHERE chapitre_id = ? AND type = ? ORDER BY id DESC",
+                          (chapitre_id, type))
+
     # --- Objectifs ---------------------------------------------------------
 
     def ajouter_objectif(self, intitule: str, date_limite: str | None = None,

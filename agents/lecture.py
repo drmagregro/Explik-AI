@@ -14,12 +14,12 @@ class AgentLecture(Agent):
     description = (
         "Agent Lecture : lit et structure un cours (photo, PDF ou chapitre déjà importé) "
         "et en extrait les notions clés, définitions et formules. À utiliser quand l'élève "
-        "envoie ou mentionne un support de cours, ou demande un résumé ou les notions d'un chapitre."
+        "envoie ou mentionne un support de cours, ou demande un résumé, les notions ou une fiche de révision d'un chapitre."
     )
     fichier_prompt = "lecture.md"
 
     def outils(self) -> list[Outil]:
-        return choisir_outils("lister_chapitres", "lire_chapitre")
+        return choisir_outils("lister_chapitres", "lire_chapitre", "generer_fiche")
 
 
 if __name__ == "__main__":
